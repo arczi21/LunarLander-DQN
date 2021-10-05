@@ -5,7 +5,7 @@ import torch
 from agent import Agent
 
 """
-botforge code
+botforge's code
 
 link:
 https://gist.github.com/botforge/64cbb71780e6208172bbf03cd9293553
