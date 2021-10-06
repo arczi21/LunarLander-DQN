@@ -37,14 +37,14 @@ class Agent:
 
         self.EXPERIENCE_REPLAY_CAPACITY = 1000000
         self.EPSILON_START = 1.0
-        self.EPSILON_END = 0.1
-        self.EPSILON_DECAY = 1000000
-        self.MIN_EXPERIENCE_SIZE = 50000
-        self.BATCH_SIZE = 32
-        self.LEARNING_RATE = 0.00025
+        self.EPSILON_END = 0.01
+        self.EPSILON_DECAY = 0.999
+        self.BATCH_SIZE = 64
+        self.MIN_EXPERIENCE_SIZE = self.BATCH_SIZE
+        self.LEARNING_RATE = 0.001
         self.GAMMA = 0.99
-        self.UPDATE_EVERY = 10000
-        self.SAVE_EVERY = 10000
+        self.UPDATE_EVERY = 1000
+        self.SAVE_EVERY = 1000
 
         self.experience_replay = ExperienceReplay(maxlen=self.EXPERIENCE_REPLAY_CAPACITY)
         self.state = self.env.reset()
@@ -58,6 +58,7 @@ class Agent:
         self.start = time.time()
         self.episode_len = 0
         self.losses = []
+        self.epsilon = 1
 
         print(self.device)
 
@@ -67,14 +68,15 @@ class Agent:
             vals = self.net(state_t)
         return torch.argmax(vals, dim=1).item()
 
-    def calculate_epsilon(self, step):
-        s = self.EPSILON_START
-        e = self.EPSILON_END
-        d = self.EPSILON_DECAY
-        return max(e, (e - s) * step / d + s)
+    def calculate_epsilon(self):
+        if self.epsilon < self.EPSILON_END:
+            return self.EPSILON_END
+        else:
+            self.epsilon = self.epsilon * self.EPSILON_DECAY
+            return self.epsilon
 
-    def epsilon_greedy(self, state, step):
-        epsilon = self.calculate_epsilon(step)
+    def epsilon_greedy(self, state):
+        epsilon = self.calculate_epsilon()
         if random.random() < epsilon:
             action = self.env.action_space.sample()
         else:
@@ -82,14 +84,16 @@ class Agent:
         return action
 
     def step(self):
-        action = self.epsilon_greedy(self.state, self.act_step)
+        action = self.epsilon_greedy(self.state)
         next_state, reward, done, _ = self.env.step(action)
         self.cumulative_reward += reward
         self.experience_replay.append(self.state, action, reward, next_state, done)
 
         self.state = next_state
         if done:
-            print('Episode %d | Reward: %.3f | Step: %d | Fps: %.3f' % (self.episode, self.cumulative_reward, self.act_step, self.episode_len / (time.time() - self.start)))
+            print('Episode %d | Reward: %.3f | Step: %d | Fps: %.3f | Epsilon: %.3f' % (self.episode, self.cumulative_reward,
+                                                                                  self.act_step, self.episode_len / (time.time() - self.start),
+                                                                                  self.epsilon))
             self.start = time.time()
             if self.monitor:
                 self.writer.add_scalar('reward', self.cumulative_reward, self.act_step)

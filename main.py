@@ -9,5 +9,5 @@ env = gym.make('LunarLander-v2')
 net = Net()
 agent = Agent(env, net)
 
-for i in range(3000000):
+for i in range(1000000):
     agent.step()

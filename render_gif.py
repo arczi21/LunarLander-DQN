@@ -1,48 +1,37 @@
-from matplotlib import animation
-import matplotlib.pyplot as plt
+import numpy as np
+import time
+import cv2
 import gym
 import torch
+from net import Net
 from agent import Agent
-
-"""
-botforge's code
-
-link:
-https://gist.github.com/botforge/64cbb71780e6208172bbf03cd9293553
-"""
-
-
-def save_frames_as_gif(frames, path='./', filename='gym_animation.gif'):
-
-    #Mess with this to change frame size
-    plt.figure(figsize=(frames[0].shape[1] / 72.0, frames[0].shape[0] / 72.0), dpi=72)
-
-    patch = plt.imshow(frames[0])
-    plt.axis('off')
-
-    def animate(i):
-        patch.set_data(frames[i])
-
-    anim = animation.FuncAnimation(plt.gcf(), animate, frames = len(frames), interval=50)
-    anim.save(path + filename, writer='imagemagick', fps=60)
-
+import glob
+from PIL import Image
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 env = gym.make('LunarLander-v2')
-net = torch.load('model/trained_net.pkl')
+net = torch.load('model/net.pkl')
 agent = Agent(env, net, monitor=False)
 
-frames = []
 
-state = env.reset()
-done = False
-while not done:
-    action = agent.greedy_action(state)
-    frames.append(env.render(mode="rgb_array"))
-    state, reward, done, _ = env.step(action)
+def render_episodes(n_episodes, render_every=3):
+    frames = []
+    idx = 0
+    for e in range(n_episodes):
+        state = env.reset()
+        done = False
+        r = 0
+        while not done:
+            action = agent.greedy_action(state)
+            if idx % render_every == 0:
+                frames.append(env.render(mode="rgb_array"))
+            state, reward, done, _ = env.step(action)
+            r += reward
+            idx += 1
+    return frames
 
 
+f = np.array(render_episodes(3, 1), dtype=np.uint8)
+f = [Image.fromarray(img) for img in f]
+f[0].save("array.gif", save_all=True, append_images=f[1:], loop=0)
 env.close()
-save_frames_as_gif(frames)
-
-
