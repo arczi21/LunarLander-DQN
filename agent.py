@@ -37,14 +37,17 @@ class Agent:
 
         self.EXPERIENCE_REPLAY_CAPACITY = 1000000
         self.EPSILON_START = 1.0
-        self.EPSILON_END = 0.01
-        self.EPSILON_DECAY = 0.999
-        self.BATCH_SIZE = 64
-        self.MIN_EXPERIENCE_SIZE = self.BATCH_SIZE
-        self.LEARNING_RATE = 0.001
+        self.EPSILON_END = 0.1
+        self.EPSILON_DECAY = 1000000
+        self.BATCH_SIZE = 32
+        self.MIN_EXPERIENCE_SIZE = 50000
+        self.LEARNING_RATE = 0.0001
         self.GAMMA = 0.99
-        self.UPDATE_EVERY = 1000
-        self.SAVE_EVERY = 1000
+        self.UPDATE_EVERY = 10000
+        self.SAVE_EVERY = 10000
+
+        self.mean_reward_alpha = 0.01
+        self.mean_reward = -600
 
         self.experience_replay = ExperienceReplay(maxlen=self.EXPERIENCE_REPLAY_CAPACITY)
         self.state = self.env.reset()
@@ -60,23 +63,19 @@ class Agent:
         self.losses = []
         self.epsilon = 1
 
-        print(self.device)
-
     def greedy_action(self, state):
         state_t = torch.FloatTensor([state]).to(self.device)
         with torch.no_grad():
             vals = self.net(state_t)
         return torch.argmax(vals, dim=1).item()
 
-    def calculate_epsilon(self):
-        if self.epsilon < self.EPSILON_END:
-            return self.EPSILON_END
-        else:
-            self.epsilon = self.epsilon * self.EPSILON_DECAY
-            return self.epsilon
+    def calculate_epsilon(self, step):
+        s = self.EPSILON_START
+        e = self.EPSILON_END
+        d = self.EPSILON_DECAY
+        return max(e, (e - s) * step / d + s)
 
-    def epsilon_greedy(self, state):
-        epsilon = self.calculate_epsilon()
+    def epsilon_greedy(self, state, epsilon):
         if random.random() < epsilon:
             action = self.env.action_space.sample()
         else:
@@ -84,19 +83,21 @@ class Agent:
         return action
 
     def step(self):
-        action = self.epsilon_greedy(self.state)
+        epsilon = self.calculate_epsilon(self.act_step)
+        action = self.epsilon_greedy(self.state, epsilon)
         next_state, reward, done, _ = self.env.step(action)
         self.cumulative_reward += reward
         self.experience_replay.append(self.state, action, reward, next_state, done)
 
         self.state = next_state
         if done:
-            print('Episode %d | Reward: %.3f | Step: %d | Fps: %.3f | Epsilon: %.3f' % (self.episode, self.cumulative_reward,
+            self.mean_reward = self.mean_reward_alpha * self.cumulative_reward + (1 - self.mean_reward_alpha) * self.mean_reward
+            print('Episode %d | Reward: %.3f | Step: %d | Fps: %.3f | Epsilon: %.3f' % (self.episode, self.mean_reward,
                                                                                   self.act_step, self.episode_len / (time.time() - self.start),
-                                                                                  self.epsilon))
+                                                                                  epsilon))
             self.start = time.time()
             if self.monitor:
-                self.writer.add_scalar('reward', self.cumulative_reward, self.act_step)
+                self.writer.add_scalar('Mean reward', self.mean_reward, self.act_step)
                 if self.act_step >= self.MIN_EXPERIENCE_SIZE:
                     self.writer.add_scalar('mean loss', np.mean(self.losses), self.act_step)
             self.losses = []
@@ -114,15 +115,16 @@ class Agent:
             dones_t = torch.BoolTensor(dones).to(self.device)
 
             vals = self.net(states_t)
+            net_argmax = torch.argmax(vals, 1).view(-1, 1)
             vals = torch.gather(vals, 1, actions_t.view(-1, 1))
 
             with torch.no_grad():
                 targets = self.target_net(next_states_t)
-            targets = torch.max(targets, dim=1)[0]
+            targets = torch.gather(targets, 1, net_argmax)
             targets[dones_t] = 0.0
-            targets = rewards_t + self.GAMMA * targets
+            targets = rewards_t.view(-1, 1) + self.GAMMA * targets
 
-            loss = self.criterion(vals, targets.view(-1, 1))
+            loss = self.criterion(vals, targets)
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()

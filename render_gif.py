@@ -10,7 +10,7 @@ from PIL import Image
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 env = gym.make('LunarLander-v2')
-net = torch.load('model/net.pkl')
+net = torch.load('model/trained_net.pkl')
 agent = Agent(env, net, monitor=False)
 
 
@@ -31,7 +31,7 @@ def render_episodes(n_episodes, render_every=3):
     return frames
 
 
-f = np.array(render_episodes(3, 1), dtype=np.uint8)
+f = np.array(render_episodes(5, 1), dtype=np.uint8)
 f = [Image.fromarray(img) for img in f]
-f[0].save("array.gif", save_all=True, append_images=f[1:], loop=0)
+f[0].save("gym_animation.gif", save_all=True, append_images=f[1:])
 env.close()
