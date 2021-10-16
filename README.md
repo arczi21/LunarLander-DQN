@@ -10,4 +10,4 @@ Solving LunarLander problem with Double DQN and Dueling Network Architecture
 [Dueling Networks](https://arxiv.org/abs/1511.06581)
 
 
-![](gym_animation.gif)
+<img src="gym_animation.gif">
